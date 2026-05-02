@@ -16,7 +16,7 @@ const firebaseConfig = {
 };
 
 const ADMIN_EMAIL = "admin@sindhorn.com"; 
-const GEMINI_API_KEY = "AIzaSyCo_TMTPGeCxVRXp83xahpkNYfGqKGm6E4"; 
+const GEMINI_API_KEY = "AIzaSyDvf9GmAB70DGOiSA6Bn3KFVu_C0rIc47I"; 
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -198,8 +198,8 @@ export default function BookingSystem() {
     setIsProcessingBulk(true);
     
     try {
-      if (!GEMINI_API_KEY || GEMINI_API_KEY === "AIzaSyCo_TMTPGeCxVRXp83xahpkNYfGqKGm6E4") {
-        alert("AIzaSyCo_TMTPGeCxVRXp83xahpkNYfGqKGm6E4");
+      if (!GEMINI_API_KEY || GEMINI_API_KEY === "AIzaSyDvf9GmAB70DGOiSA6Bn3KFVu_C0rIc47I") {
+        alert("Fail");
         setIsProcessingBulk(false);
         return;
       }
