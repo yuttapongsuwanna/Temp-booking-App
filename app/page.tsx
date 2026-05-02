@@ -6,9 +6,6 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from
 import { getFirestore, collection, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { Calendar as CalendarIcon, Clock, Users, CheckCircle, AlertCircle, Sparkles, User as UserIcon, ShieldAlert, ChevronLeft, ChevronRight, Edit2, Save, X, Settings, LogOut } from 'lucide-react';
 
-// ============================================================================
-// 1. FIREBASE CONFIGURATION (นำโค้ดของคุณมาใส่ตรงนี้)
-// ============================================================================
 const firebaseConfig = {
   apiKey: "AIzaSyCC7ulkUa_JZLPAZRqV60gbn5gvKIxAQfM",
   authDomain: "na-n-friends-booking-app.firebaseapp.com",
@@ -18,10 +15,6 @@ const firebaseConfig = {
   appId: "1:536791136057:web:beb898342be4dc5e42dae8"
 };
 
-
-// ============================================================================
-// 2. ADMIN EMAIL SETUP (ใส่อีเมลที่จะให้เป็นแอดมิน)
-// ============================================================================
 const ADMIN_EMAIL = "admin@sindhorn.com"; 
 
 // Initialize Firebase
@@ -31,24 +24,24 @@ const db = getFirestore(app);
 
 export default function BookingSystem() {
   // --- Auth State ---
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
 
   // --- App State ---
-  const [classes, setClasses] = useState([]);
-  const [currentUserProfile, setCurrentUserProfile] = useState(null);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   
   // View State (Day / Week / Month / My Bookings)
   const [viewMode, setViewMode] = useState('month');
   const [currentDate, setCurrentDate] = useState(new Date());
 
   // Modal & Input State
-  const [selectedClassId, setSelectedClassId] = useState(null);
+  const [selectedClassId, setSelectedClassId] = useState<any>(null);
   const [aiInput, setAiInput] = useState('');
-  const [editingClassId, setEditingClassId] = useState(null);
+  const [editingClassId, setEditingClassId] = useState<any>(null);
   const [editFormData, setEditFormData] = useState({ title: '', date: '', time: '' });
 
   // System Settings State (In a real app, this should also be in Firestore)
@@ -62,7 +55,7 @@ export default function BookingSystem() {
   // AUTHENTICATION & DATA FETCHING
   // ============================================================================
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser: any) => {
       if (currentUser) {
         setUser(currentUser);
         // Determine role based on email
@@ -88,8 +81,8 @@ export default function BookingSystem() {
   useEffect(() => {
     if (!user) return; // Only fetch data if logged in
 
-    const unsubscribe = onSnapshot(collection(db, 'classes'), (snapshot) => {
-      const classesData = snapshot.docs.map(doc => ({
+    const unsubscribe = onSnapshot(collection(db, 'classes'), (snapshot: any) => {
+      const classesData = snapshot.docs.map((doc: any) => ({
         id: doc.id,
         ...doc.data()
       }));
@@ -99,7 +92,7 @@ export default function BookingSystem() {
     return () => unsubscribe();
   }, [user]);
 
-  const handleLogin = async (e) => {
+  const handleLogin = async (e: any) => {
     e.preventDefault();
     setLoginError('');
     try {
@@ -116,14 +109,14 @@ export default function BookingSystem() {
   // ============================================================================
   // DATE LOGIC HELPERS
   // ============================================================================
-  const getStartOfWeek = (date) => {
+  const getStartOfWeek = (date: any) => {
     const d = new Date(date);
     const day = d.getDay();
     const diff = d.getDate() - day; // Sunday is 0
     return new Date(d.setDate(diff));
   };
 
-  const navigateDate = (direction) => {
+  const navigateDate = (direction: number) => {
     const newDate = new Date(currentDate);
     if (viewMode === 'day') newDate.setDate(newDate.getDate() + direction);
     else if (viewMode === 'week') newDate.setDate(newDate.getDate() + (direction * 7));
@@ -132,7 +125,7 @@ export default function BookingSystem() {
   };
 
   const getDisplayDateRange = () => {
-    const options = { month: 'short', day: 'numeric', year: 'numeric' };
+    const options: any = { month: 'short', day: 'numeric', year: 'numeric' };
     if (viewMode === 'day') return currentDate.toLocaleDateString('en-US', options);
     if (viewMode === 'week') {
       const start = getStartOfWeek(currentDate);
@@ -167,7 +160,7 @@ export default function BookingSystem() {
     return days;
   };
 
-  const getClassesForDate = (dateObj) => {
+  const getClassesForDate = (dateObj: any) => {
     const dateString = dateObj.toLocaleDateString('sv-SE'); 
     return classes.filter(c => c.date === dateString).sort((a, b) => a.time.localeCompare(b.time));
   };
@@ -176,15 +169,15 @@ export default function BookingSystem() {
     return classes.filter(c => {
       const classDate = new Date(c.date);
       return classDate.toDateString() === currentDate.toDateString();
-    }).sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
+    }).sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
   }, [classes, currentDate]);
 
   const myClasses = useMemo(() => {
     if (!currentUserProfile) return [];
     return classes.filter(c => 
-      c.booked?.some(b => b.id === currentUserProfile.id) || 
-      c.waitlist?.some(w => w.id === currentUserProfile.id)
-    ).sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
+      c.booked?.some((b: any) => b.id === currentUserProfile.id) || 
+      c.waitlist?.some((w: any) => w.id === currentUserProfile.id)
+    ).sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
   }, [classes, currentUserProfile]);
 
   // ============================================================================
@@ -208,14 +201,14 @@ export default function BookingSystem() {
     }
   };
 
-  const deleteClass = async (classId) => {
+  const deleteClass = async (classId: string) => {
     if(window.confirm("Are you sure you want to delete this class?")) {
       await deleteDoc(doc(db, 'classes', classId));
       setSelectedClassId(null);
     }
   };
 
-  const startEditing = (classItem) => {
+  const startEditing = (classItem: any) => {
     setEditingClassId(classItem.id);
     setEditFormData({ title: classItem.title, date: classItem.date, time: classItem.time });
   };
@@ -233,7 +226,7 @@ export default function BookingSystem() {
     }
   };
 
-  const handleBook = async (classItem) => {
+  const handleBook = async (classItem: any) => {
     if (!isBookingTimeAllowed && currentUserProfile.role !== 'admin') {
       alert("Booking is currently closed based on system settings.");
       return;
@@ -252,10 +245,10 @@ export default function BookingSystem() {
     await updateDoc(classRef, { booked: newBooked, waitlist: newWaitlist });
   };
 
-  const handleCancel = async (classItem) => {
+  const handleCancel = async (classItem: any) => {
     const classRef = doc(db, 'classes', classItem.id);
-    let newBooked = (classItem.booked || []).filter(b => b.id !== currentUserProfile.id);
-    let newWaitlist = (classItem.waitlist || []).filter(w => w.id !== currentUserProfile.id);
+    let newBooked = (classItem.booked || []).filter((b: any) => b.id !== currentUserProfile.id);
+    let newWaitlist = (classItem.waitlist || []).filter((w: any) => w.id !== currentUserProfile.id);
     
     // Auto-promotion logic
     if (newBooked.length < (classItem.booked || []).length && newWaitlist.length > 0) {
@@ -266,15 +259,15 @@ export default function BookingSystem() {
     await updateDoc(classRef, { booked: newBooked, waitlist: newWaitlist });
   };
 
-  const handleAdminConfirm = async (classItem, userId) => {
+  const handleAdminConfirm = async (classItem: any, userId: string) => {
     const classRef = doc(db, 'classes', classItem.id);
-    const newBooked = (classItem.booked || []).map(b => b.id === userId ? { ...b, status: 'confirmed' } : b);
+    const newBooked = (classItem.booked || []).map((b: any) => b.id === userId ? { ...b, status: 'confirmed' } : b);
     await updateDoc(classRef, { booked: newBooked });
   };
 
-  const handleAdminSkip = async (classItem, userId) => {
+  const handleAdminSkip = async (classItem: any, userId: string) => {
     const classRef = doc(db, 'classes', classItem.id);
-    let newBooked = (classItem.booked || []).filter(b => b.id !== userId);
+    let newBooked = (classItem.booked || []).filter((b: any) => b.id !== userId);
     let newWaitlist = [...(classItem.waitlist || [])];
     
     if (newWaitlist.length > 0) {
@@ -343,14 +336,14 @@ export default function BookingSystem() {
 
   // --- 3. Main Application ---
 
-  const renderClassCard = (classItem) => {
+  const renderClassCard = (classItem: any) => {
     const bookedArray = classItem.booked || [];
     const waitlistArray = classItem.waitlist || [];
     const isFull = bookedArray.length >= 2;
-    const myBooking = bookedArray.find(b => b.id === currentUserProfile.id);
-    const myWaitlist = waitlistArray.find(w => w.id === currentUserProfile.id);
+    const myBooking = bookedArray.find((b: any) => b.id === currentUserProfile.id);
+    const myWaitlist = waitlistArray.find((w: any) => w.id === currentUserProfile.id);
     const myStatus = myBooking ? myBooking.status : (myWaitlist ? 'waitlist' : 'none');
-    const hasPendingUser = currentUserProfile.role === 'admin' && bookedArray.some(b => b.status === 'pending');
+    const hasPendingUser = currentUserProfile.role === 'admin' && bookedArray.some((b: any) => b.status === 'pending');
     const isEditing = editingClassId === classItem.id;
 
     return (
@@ -411,7 +404,7 @@ export default function BookingSystem() {
                 <p className="font-bold text-slate-800 mb-2">Attendees</p>
                 {bookedArray.length === 0 ? <p className="text-slate-500 text-sm mb-4 italic">No attendees yet.</p> : (
                   <ul className="space-y-2 mb-4">
-                    {bookedArray.map((b, i) => (
+                    {bookedArray.map((b: any, i: number) => (
                       <li key={i} className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-3 rounded-lg border border-slate-200 shadow-sm gap-3">
                         <span className="font-medium text-slate-800 flex flex-wrap items-center gap-2">
                           {b.name} 
@@ -431,7 +424,7 @@ export default function BookingSystem() {
                 <p className="font-bold text-slate-800 mb-2">Waitlist</p>
                 {waitlistArray.length === 0 ? <p className="text-slate-500 text-sm italic">Queue is empty.</p> : (
                   <div className="flex flex-wrap gap-2">
-                    {waitlistArray.map((w, i) => (
+                    {waitlistArray.map((w: any, i: number) => (
                       <div key={i} className="bg-white border border-slate-200 text-slate-700 flex items-center text-xs font-medium px-3 py-1.5 rounded-lg shadow-sm">
                         <span className="bg-slate-200 text-slate-800 rounded px-1.5 py-0.5 mr-2 font-bold">No.{i+1}</span> {w.name}
                       </div>
@@ -477,7 +470,7 @@ export default function BookingSystem() {
                   <div className="text-center w-full">
                     <div className="text-sm text-slate-700 mb-3 md:mb-4 bg-orange-50 p-3 md:p-4 rounded-xl border border-orange-100">
                       <span className="block font-bold mb-1">On Waitlist</span>
-                      Position: <span className="text-orange-600 font-bold text-lg ml-1">{waitlistArray.findIndex(w => w.id === currentUserProfile.id) + 1}</span>
+                      Position: <span className="text-orange-600 font-bold text-lg ml-1">{waitlistArray.findIndex((w: any) => w.id === currentUserProfile.id) + 1}</span>
                     </div>
                     <button onClick={() => handleCancel(classItem)} className="w-full py-2.5 text-slate-500 hover:text-red-600 text-sm font-medium transition-colors underline underline-offset-2">
                       Leave Queue
@@ -517,13 +510,13 @@ export default function BookingSystem() {
                   </div>
                   
                   <div className="flex flex-col gap-1 overflow-y-auto pr-1">
-                    {dayClasses.map(c => {
+                    {dayClasses.map((c: any) => {
                       const bookedArray = c.booked || [];
                       const waitlistArray = c.waitlist || [];
                       const isFull = bookedArray.length >= 2;
-                      const hasMyBooking = bookedArray.find(b => b.id === currentUserProfile.id);
-                      const hasMyWaitlist = waitlistArray.find(w => w.id === currentUserProfile.id);
-                      const needsAdminAction = currentUserProfile.role === 'admin' && bookedArray.some(b => b.status === 'pending');
+                      const hasMyBooking = bookedArray.find((b: any) => b.id === currentUserProfile.id);
+                      const hasMyWaitlist = waitlistArray.find((w: any) => w.id === currentUserProfile.id);
+                      const needsAdminAction = currentUserProfile.role === 'admin' && bookedArray.some((b: any) => b.status === 'pending');
                       
                       let pillColor = 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200';
                       if (hasMyBooking) pillColor = 'bg-green-50 hover:bg-green-100 text-green-700 border-green-200';
@@ -659,7 +652,7 @@ export default function BookingSystem() {
                 <CalendarIcon className="w-12 h-12 mb-3 text-slate-300" />
                 <p className="font-medium text-lg">You have no upcoming bookings.</p>
               </div>
-            ) : myClasses.map(c => renderClassCard(c))}
+            ) : myClasses.map((c: any) => renderClassCard(c))}
           </div>
         ) : viewMode === 'day' ? (
           <div className="space-y-4">
@@ -668,7 +661,7 @@ export default function BookingSystem() {
                 <CalendarIcon className="w-12 h-12 mb-3 text-slate-300" />
                 <p className="font-medium text-lg">No classes scheduled for today.</p>
               </div>
-            ) : filteredClassesDayView.map(c => renderClassCard(c))}
+            ) : filteredClassesDayView.map((c: any) => renderClassCard(c))}
           </div>
         ) : renderCalendarGrid()}
 
