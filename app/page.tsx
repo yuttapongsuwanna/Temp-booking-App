@@ -199,7 +199,7 @@ export default function BookingSystem() {
     
     try {
       if (!GEMINI_API_KEY || GEMINI_API_KEY === "AIzaSyCo_TMTPGeCxVRXp83xahpkNYfGqKGm6E4") {
-        alert("กรุณาใส่ GEMINI_API_KEY ในโค้ดด้านบน ก่อนใช้งานฟีเจอร์ AI ครับ");
+        alert("AIzaSyCo_TMTPGeCxVRXp83xahpkNYfGqKGm6E4");
         setIsProcessingBulk(false);
         return;
       }
