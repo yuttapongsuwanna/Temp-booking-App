@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Clock, Users, CheckCircle, AlertCircle, Sparkles, User as UserIcon, ShieldAlert, ChevronLeft, ChevronRight, Edit2, Save, X, Settings, LogOut } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Users, CheckCircle, AlertCircle, Sparkles, User as UserIcon, ShieldAlert, ChevronLeft, ChevronRight, Edit2, Save, X, Settings, LogOut, Upload, Repeat } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCC7ulkUa_JZLPAZRqV60gbn5gvKIxAQfM",
@@ -16,6 +16,7 @@ const firebaseConfig = {
 };
 
 const ADMIN_EMAIL = "admin@sindhorn.com"; 
+const GEMINI_API_KEY = "AIzaSyCo_TMTPGeCxVRXp83xahpkNYfGqKGm6E4"; 
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -44,6 +45,11 @@ export default function BookingSystem() {
   const [editingClassId, setEditingClassId] = useState<any>(null);
   const [editFormData, setEditFormData] = useState({ title: '', date: '', time: '' });
 
+  // Admin Advanced Creation State
+  const [adminCreationTab, setAdminCreationTab] = useState('recurring');
+  const [recurringData, setRecurringData] = useState({ title: '', startDate: '', endDate: '', time: '10:00', days: [] as number[] });
+  const [isProcessingBulk, setIsProcessingBulk] = useState(false);
+
   // System Settings State (In a real app, this should also be in Firestore)
   const [bookingStartHour, setBookingStartHour] = useState(6);
   const [bookingEndHour, setBookingEndHour] = useState(22);   
@@ -60,7 +66,6 @@ export default function BookingSystem() {
         setUser(currentUser);
         // Determine role based on email
         const role = currentUser.email === ADMIN_EMAIL ? 'admin' : 'user';
-        // Use email prefix as name (or fetch real name from DB if you have a users collection)
         const name = currentUser.email === ADMIN_EMAIL ? 'Admin' : currentUser.email.split('@')[0];
         
         setCurrentUserProfile({ 
@@ -107,7 +112,7 @@ export default function BookingSystem() {
   };
 
   // ============================================================================
-  // DATE LOGIC HELPERS
+  // DATE LOGIC & MEMO HELPERS
   // ============================================================================
   const getStartOfWeek = (date: any) => {
     const d = new Date(date);
@@ -180,25 +185,120 @@ export default function BookingSystem() {
     ).sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
   }, [classes, currentUserProfile]);
 
+  const uniqueClassTitles = useMemo(() => {
+    const titles = classes.map(c => c.title);
+    return Array.from(new Set(titles));
+  }, [classes]);
+
   // ============================================================================
   // DATABASE ACTION FUNCTIONS
   // ============================================================================
   const handleAiCreateClass = async () => {
     if (!aiInput.trim()) return;
+    setIsProcessingBulk(true);
+    
     try {
+      if (!GEMINI_API_KEY || GEMINI_API_KEY === "AIzaSyCo_TMTPGeCxVRXp83xahpkNYfGqKGm6E4") {
+        alert("กรุณาใส่ GEMINI_API_KEY ในโค้ดด้านบน ก่อนใช้งานฟีเจอร์ AI ครับ");
+        setIsProcessingBulk(false);
+        return;
+      }
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `สร้างคลาสจากข้อความนี้: "${aiInput}". ปีปัจจุบันคือ ${new Date().getFullYear()} และวันนี้คือวันที่ ${currentDate.toLocaleDateString('sv-SE')}` }] }],
+          systemInstruction: { parts: [{ text: 'Extract class details. Return ONLY a valid JSON object in this format (no markdown tags): {"title": "ชื่อคลาส", "date": "YYYY-MM-DD", "time": "HH:mm"}. ตัวอย่างเวลา 18:00, 08:00' }] },
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+
+      const data = await response.json();
+      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      if (!textResponse) throw new Error("No response from AI");
+      const parsedData = JSON.parse(textResponse.trim());
+
       await addDoc(collection(db, 'classes'), {
-        title: aiInput,
-        date: currentDate.toLocaleDateString('sv-SE'), 
-        time: '10:00',
+        title: parsedData.title || 'คลาสใหม่',
+        date: parsedData.date || currentDate.toLocaleDateString('sv-SE'), 
+        time: parsedData.time || '10:00',
         booked: [],
         waitlist: [],
         createdAt: serverTimestamp()
       });
+      
+      alert(`✨ AI สร้างคลาส "${parsedData.title}" เรียบร้อยครับ!`);
       setAiInput('');
     } catch (error) {
-      console.error("Error creating class:", error);
-      alert("Failed to create class.");
+      console.error("Error creating class with AI:", error);
+      alert("AI ไม่สามารถวิเคราะห์ได้ กรุณาลองใหม่ เช่น 'คลาสโยคะ พรุ่งนี้ 18:00'");
     }
+    setIsProcessingBulk(false);
+  };
+
+  const handleRecurringCreate = async () => {
+    if (!recurringData.title || !recurringData.startDate || !recurringData.endDate || recurringData.days.length === 0) {
+      alert("กรุณากรอกข้อมูลให้ครบ และเลือกวันอย่างน้อย 1 วัน");
+      return;
+    }
+    setIsProcessingBulk(true);
+    const start = new Date(recurringData.startDate);
+    const end = new Date(recurringData.endDate);
+    let curr = new Date(start);
+    let successCount = 0;
+
+    while (curr <= end) {
+      if (recurringData.days.includes(curr.getDay())) {
+        await addDoc(collection(db, 'classes'), {
+          title: recurringData.title,
+          date: curr.toLocaleDateString('sv-SE'), 
+          time: recurringData.time,
+          booked: [],
+          waitlist: [],
+          createdAt: serverTimestamp()
+        });
+        successCount++;
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+    alert(`สร้างคลาสสำเร็จ ${successCount} คลาส`);
+    setIsProcessingBulk(false);
+    setRecurringData({ ...recurringData, title: '' }); 
+  };
+
+  const handleCsvUpload = async (e: any) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsProcessingBulk(true);
+    const reader = new FileReader();
+    reader.onload = async (event: any) => {
+      const csvText = event.target.result;
+      const lines = csvText.split('\n');
+      let successCount = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        if (i === 0 && line.toLowerCase().includes('title')) continue; 
+        const parts = line.split(',');
+        if (parts.length >= 3) {
+          const title = parts[0].trim();
+          const date = parts[1].trim(); 
+          const time = parts[2].trim(); 
+          if (title && date && time) {
+            await addDoc(collection(db, 'classes'), {
+              title, date, time, booked: [], waitlist: [], createdAt: serverTimestamp()
+            });
+            successCount++;
+          }
+        }
+      }
+      alert(`นำเข้าสำเร็จ ${successCount} คลาสจากไฟล์ CSV`);
+      setIsProcessingBulk(false);
+      e.target.value = ''; 
+    };
+    reader.readAsText(file);
   };
 
   const deleteClass = async (classId: string) => {
@@ -250,7 +350,6 @@ export default function BookingSystem() {
     let newBooked = (classItem.booked || []).filter((b: any) => b.id !== currentUserProfile.id);
     let newWaitlist = (classItem.waitlist || []).filter((w: any) => w.id !== currentUserProfile.id);
     
-    // Auto-promotion logic
     if (newBooked.length < (classItem.booked || []).length && newWaitlist.length > 0) {
       const nextInLine = newWaitlist.shift(); 
       newBooked.push({ ...nextInLine, status: 'pending' }); 
@@ -282,7 +381,6 @@ export default function BookingSystem() {
   // UI COMPONENTS
   // ============================================================================
 
-  // --- 1. Loading Screen ---
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -291,7 +389,6 @@ export default function BookingSystem() {
     );
   }
 
-  // --- 2. Login Screen ---
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans text-slate-800">
@@ -301,7 +398,7 @@ export default function BookingSystem() {
               <CalendarIcon className="w-8 h-8" />
             </div>
             <h1 className="text-2xl font-bold text-center">Studio Sign In</h1>
-            <p className="text-sm text-slate-500 mt-2 text-center">Enter the credentials provided by your studio.</p>
+            <p className="text-sm text-slate-500 mt-2 text-center">Enter your email and password.</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -333,8 +430,6 @@ export default function BookingSystem() {
       </div>
     );
   }
-
-  // --- 3. Main Application ---
 
   const renderClassCard = (classItem: any) => {
     const bookedArray = classItem.booked || [];
@@ -577,15 +672,93 @@ export default function BookingSystem() {
         {/* Admin Tools Area */}
         {currentUserProfile?.role === 'admin' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div className="md:col-span-2 bg-blue-50 rounded-2xl p-6 border border-blue-100">
-              <h2 className="text-lg font-bold text-blue-900 mb-2 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-blue-600" /> Create Class (AI)
-              </h2>
-              <p className="text-sm text-blue-700 mb-4">Type a prompt to add a new class (e.g., "Zumba tomorrow 18:00")</p>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <input type="text" value={aiInput} onChange={(e) => setAiInput(e.target.value)} placeholder="Class details..." className="flex-1 bg-white border border-blue-200 px-4 py-3 rounded-xl outline-none focus:border-blue-500 focus:ring-2" onKeyPress={(e) => e.key === 'Enter' && handleAiCreateClass()} />
-                <button onClick={handleAiCreateClass} disabled={!aiInput.trim()} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2">Create</button>
+            
+            {/* Admin Multi-mode Creation Tool */}
+            <div className="md:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+              
+              <datalist id="past-class-titles">
+                {uniqueClassTitles.map((t: any) => <option key={t} value={t} />)}
+              </datalist>
+
+              <div className="flex border-b border-slate-200 mb-4 gap-4 overflow-x-auto hide-scrollbar">
+                <button onClick={() => setAdminCreationTab('recurring')} className={`pb-2 whitespace-nowrap text-sm font-bold flex items-center gap-1 ${adminCreationTab === 'recurring' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
+                  <Repeat className="w-4 h-4"/> สร้างรายสัปดาห์
+                </button>
+                <button onClick={() => setAdminCreationTab('csv')} className={`pb-2 whitespace-nowrap text-sm font-bold flex items-center gap-1 ${adminCreationTab === 'csv' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
+                  <Upload className="w-4 h-4"/> อัปโหลด CSV
+                </button>
+                <button onClick={() => setAdminCreationTab('ai')} className={`pb-2 whitespace-nowrap text-sm font-bold flex items-center gap-1 ${adminCreationTab === 'ai' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>
+                  <Sparkles className="w-4 h-4"/> ให้ AI ช่วยสร้าง
+                </button>
               </div>
+
+              {adminCreationTab === 'recurring' && (
+                <div className="space-y-4 animate-in fade-in duration-300">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">ชื่อคลาส</label>
+                      <input list="past-class-titles" type="text" placeholder="เช่น Basic Pilates" value={recurringData.title} onChange={e => setRecurringData({...recurringData, title: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">เวลา</label>
+                      <input type="time" value={recurringData.time} onChange={e => setRecurringData({...recurringData, time: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">เริ่มตั้งแต่วันที่</label>
+                      <input type="date" value={recurringData.startDate} onChange={e => setRecurringData({...recurringData, startDate: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">สิ้นสุดวันที่</label>
+                      <input type="date" value={recurringData.endDate} onChange={e => setRecurringData({...recurringData, endDate: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:border-blue-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-2">เปิดสอนทุกวัน</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[{id:0, n:'อา.'}, {id:1, n:'จ.'}, {id:2, n:'อ.'}, {id:3, n:'พ.'}, {id:4, n:'พฤ.'}, {id:5, n:'ศ.'}, {id:6, n:'ส.'}].map(day => (
+                        <button 
+                          key={day.id} 
+                          onClick={() => {
+                            const newDays = recurringData.days.includes(day.id) 
+                              ? recurringData.days.filter(d => d !== day.id) 
+                              : [...recurringData.days, day.id];
+                            setRecurringData({...recurringData, days: newDays});
+                          }}
+                          className={`w-10 h-10 rounded-full font-bold text-sm transition-colors ${recurringData.days.includes(day.id) ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                        >
+                          {day.n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button onClick={handleRecurringCreate} disabled={isProcessingBulk} className="mt-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+                    {isProcessingBulk ? 'กำลังสร้าง...' : 'เพิ่มคลาสทั้งหมดลงตาราง'}
+                  </button>
+                </div>
+              )}
+
+              {adminCreationTab === 'csv' && (
+                <div className="space-y-4 animate-in fade-in duration-300 py-4">
+                  <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl text-sm text-blue-800">
+                    <p className="font-bold mb-1">รูปแบบไฟล์ CSV ที่รองรับ:</p>
+                    <p>ชื่อคลาส, วันที่(YYYY-MM-DD), เวลา(HH:mm)</p>
+                  </div>
+                  <input type="file" accept=".csv" onChange={handleCsvUpload} disabled={isProcessingBulk} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all cursor-pointer border border-slate-200 rounded-lg" />
+                  {isProcessingBulk && <p className="text-sm text-blue-600 font-bold animate-pulse mt-2">กำลังนำเข้าข้อมูล...</p>}
+                </div>
+              )}
+
+              {adminCreationTab === 'ai' && (
+                <div className="space-y-4 animate-in fade-in duration-300 py-2">
+                  <p className="text-sm text-slate-600">พิมพ์คำสั่งภาษาธรรมดาเพื่อสร้างคลาส (เช่น "Zumba tomorrow 18:00")</p>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <input type="text" value={aiInput} onChange={(e) => setAiInput(e.target.value)} placeholder="Class details..." className="flex-1 bg-white border border-slate-300 px-4 py-3 rounded-xl outline-none focus:border-blue-500 focus:ring-2" onKeyPress={(e) => e.key === 'Enter' && handleAiCreateClass()} />
+                    <button onClick={handleAiCreateClass} disabled={isProcessingBulk || !aiInput.trim()} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+                      {isProcessingBulk && adminCreationTab === 'ai' ? 'กำลังคิด...' : 'สร้างคลาส'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="bg-slate-100 rounded-2xl p-6 border border-slate-200">
